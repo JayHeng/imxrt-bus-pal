@@ -29,7 +29,6 @@
  */
 
 #include "utilities/fsl_assert.h"
-#include "bootloader/bl_peripheral_interface.h"
 #include "utilities/fsl_rtos_abstraction.h"
 #include "fsl_device_registers.h"
 #include "microseconds/microseconds.h"

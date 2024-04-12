@@ -17,6 +17,7 @@
 *.elf
 *.bin
 
+*/*/*/settings/
 
 */*/*/*/*/settings/
 */*/*/*/*/output/

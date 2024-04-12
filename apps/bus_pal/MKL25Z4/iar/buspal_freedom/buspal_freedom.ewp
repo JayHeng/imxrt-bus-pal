@@ -40,7 +40,7 @@
                 </option>
                 <option>
                     <name>Output description</name>
-                    <state>No specifier a, A, no specifier n, no float nor long long, no flags.</state>
+                    <state>No specifier a, A, no specifier n, no float nor long long, no flags, without multibyte support.</state>
                 </option>
                 <option>
                     <name>GOutputBinary</name>
@@ -62,7 +62,7 @@
                 </option>
                 <option>
                     <name>RTDescription</name>
-                    <state>0</state>
+                    <state>A compact configuration of the C/C++14 runtime library. No locale interface, C locale, no file descriptor support, no multibytes in printf and scanf, and no hex floats in strtod.</state>
                 </option>
                 <option>
                     <name>OGProductVersion</name>
@@ -823,7 +823,6 @@
                 <option>
                     <name>IlinkExtraOptions</name>
                     <state> --redirect __aeabi_idiv=__iar_small___aeabi_idiv </state>
-                    <state> --redirect __aeabi_uidiv=__iar_small___aeabi_uidiv </state>
                     <state> --redirect __aeabi_idivmod=__iar_small___aeabi_idivmod </state>
                     <state> --redirect __aeabi_uidivmod=__iar_small___aeabi_uidivmod </state>
                 </option>
@@ -1022,7 +1021,7 @@
                 </option>
                 <option>
                     <name>IlinkTrustzoneImportLibraryOut</name>
-                    <state>###Unitialized###</state>
+                    <state>buspal_freedom_import_lib.o</state>
                 </option>
                 <option>
                     <name>OILinkExtraOption</name>
@@ -1202,7 +1201,7 @@
                 </option>
                 <option>
                     <name>RTConfigPath2</name>
-                    <state>$TOOLKIT_DIR$\INC\c\DLib_Config_Normal.h</state>
+                    <state>$TOOLKIT_DIR$\inc\c\DLib_Config_Normal.h</state>
                 </option>
                 <option>
                     <name>GBECoreSlave</name>
@@ -1930,7 +1929,6 @@
                 <option>
                     <name>IlinkExtraOptions</name>
                     <state> --redirect __aeabi_idiv=__iar_small___aeabi_idiv </state>
-                    <state> --redirect __aeabi_uidiv=__iar_small___aeabi_uidiv </state>
                     <state> --redirect __aeabi_idivmod=__iar_small___aeabi_idivmod </state>
                     <state> --redirect __aeabi_uidivmod=__iar_small___aeabi_uidivmod </state>
                 </option>
@@ -2129,7 +2127,7 @@
                 </option>
                 <option>
                     <name>IlinkTrustzoneImportLibraryOut</name>
-                    <state>###Unitialized###</state>
+                    <state>buspal_freedom_import_lib.o</state>
                 </option>
                 <option>
                     <name>OILinkExtraOption</name>
