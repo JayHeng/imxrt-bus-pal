@@ -24,6 +24,9 @@
 */*/*/*/*/Debug/
 */*/*/*/*/Release/
 
+*/*/*/*/settings/
+*/*/*/*/Debug/
+*/*/*/*/Release/
 
 # IAR temp files
 EW*.tmp
