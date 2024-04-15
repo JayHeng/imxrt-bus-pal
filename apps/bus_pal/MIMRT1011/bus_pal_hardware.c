@@ -31,7 +31,6 @@
 #include "bus_pal_hardware.h"
 #include "fpga_clock_registers.h"
 #include "fsl_device_registers.h"
-#include "i2c/fsl_i2c.h"
 #include "microseconds/microseconds.h"
 #include "spi/fsl_spi.h"
 #include "lpsci/fsl_lpsci.h"
@@ -75,22 +74,11 @@ static PORT_Type *getPortBaseAddrFromAscii(uint8_t port);
  */
 static GPIO_Type *getGpioBaseAddrFromAscii(uint8_t port);
 
-/*!
- * @brief fpga write clock reg function.
- */
-static void write_fpga_clock_reg(uint8_t reg, uint8_t val);
-
 ////////////////////////////////////////////////////////////////////////////////
 // Variables
 ////////////////////////////////////////////////////////////////////////////////
 
-//! @brief Variable for i2c host configuration information
-static i2c_user_config_t s_i2cUserConfig = {.slaveAddress = 0x10, //!< The slave's 7-bit address
-                                            .baudRate_kbps = 100 };
-
-static i2c_user_config_t s_i2cFPGAUserConfig = {.slaveAddress = CY22393_ADDR, //!< The slave's 7-bit address
-                                                .baudRate_kbps = 400 };
-
+//! @brief Variable for spi host configuration information
 static spi_user_config_t s_spiUserConfig = {.polarity = kSPI_ClockPolarityActiveLow, /*!< Clock polarity */
                                             .phase = kSPI_ClockPhaseSecondEdge,      /*!< Clock phase */
                                             .direction = kSPI_MsbFirst,              /*!< MSB or LSB */
@@ -98,14 +86,12 @@ static spi_user_config_t s_spiUserConfig = {.polarity = kSPI_ClockPolarityActive
                                             .clock_Hz = 0 };
 
 static spi_master_handle_t s_spiHandle;
-static i2c_master_handle_t s_i2cHandle;
 
 //! @brief Variable for host data receiving
 static uint8_t *s_rxData;
 static uint32_t s_bytesRx;
 
 const static uint32_t g_spiBaseAddr[] = SPI_BASE_ADDRS;
-const static uint32_t g_i2cBaseAddr[] = I2C_BASE_ADDRS;
 const static uint32_t g_lpsciBaseAddr[] = UART0_BASE_ADDRS;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -214,8 +200,6 @@ void init_hardware(void)
 
     init_uarts();
     init_spi();
-    init_i2c(0);
-    init_i2c(1);
 }
 
 /*FUNCTION**********************************************************************
@@ -284,159 +268,12 @@ void UART0_IRQHandler(void)
 
 /*FUNCTION**********************************************************************
  *
- * Function Name : write_fpga_clock_reg
- * Description   : fpga clock reg write function
- *
- *END**************************************************************************/
-void write_fpga_clock_reg(uint8_t reg, uint8_t val)
-{
-    uint8_t packet[2] = { reg, val };
-    uint32_t baseAddr = g_lpsciBaseAddr[0];
-
-    i2c_master_transfer_t send_data;
-    send_data.slaveAddress = s_i2cFPGAUserConfig.slaveAddress;
-    send_data.direction = kI2C_Write;
-    send_data.data = packet;
-    send_data.dataSize = 2;
-
-    I2C_MasterTransferBlocking((I2C_Type *)baseAddr, &send_data);
-}
-
-/*FUNCTION**********************************************************************
- *
  * Function Name : set_fpga_clock
  * Description   : fpga clock set function
  *
  *END**************************************************************************/
 void set_fpga_clock(uint32_t clock)
 {
-    uint32_t i;
-    uint32_t P, bestP;
-    uint32_t Q, bestQ;
-    uint32_t realClock;
-    uint32_t diff, min_diff;
-    uint32_t PHigh, P0;
-    uint32_t pumpVal;
-    uint32_t vcoClock;
-    uint32_t postDiv;
-
-    // Get the closest we can to the max VCO clock
-    vcoClock = clock * (CY22393_MAX_VCO_CLK / clock);
-    // Get the post divider we will need after setting to this high clock
-    postDiv = vcoClock / clock;
-
-    // The post div value cannot be above 31 for VCO clocks above 333MHZ
-    if (postDiv > CY22393_POSTDIV_MAX_VAL)
-    {
-        uint32_t correction = postDiv - CY22393_POSTDIV_MAX_VAL;
-        vcoClock = CY22393_MAX_VCO_CLK - (clock * correction);
-        postDiv = CY22393_POSTDIV_MAX_VAL;
-    }
-
-    /* http://www.cypress.com/?id=4&rID=27709 */
-    /* In all for loops, if min_diff = 0, exit for loop */
-    /* F = (Ref * (P/Q)) / postDiv */
-    /* Ref / Q must be >= 250khz */
-    /* Q range can be between 2 and 257 */
-    /* P range can be between 16 and 1600 */
-    /* find combination of p0, p, and q resulting in clock closest to the requested value */
-    min_diff = ~0;
-    bestP = 0;
-    bestQ = 0;
-
-    for (Q = 2; ((CY22393_REF_CLK / Q) >= CY22393_MIN_REF_DIV_Q) && (Q < 257) && min_diff; Q++)
-    {
-        for (P = 16; (P <= 1600) && min_diff; P++)
-        {
-            realClock = (CY22393_REF_CLK / Q) * P;
-
-            if (vcoClock >= realClock)
-            {
-                diff = vcoClock - realClock;
-            }
-            else
-            {
-                diff = realClock - vcoClock;
-            }
-
-            if (min_diff > diff)
-            {
-                /* a better match found */
-                min_diff = diff;
-                bestP = P;
-                bestQ = Q;
-            }
-
-            // Since we are just increasing our multiplier in this loop if its past our desired clock
-            // we can break to start increasing the quotient
-            if (realClock > vcoClock)
-            {
-                break;
-            }
-        }
-    }
-
-    P0 = bestP & 1;
-    PHigh = (bestP / 2) - 3;
-    bestQ -= 2;
-
-    if ((bestP >= 16) && (bestP <= 231))
-    {
-        pumpVal = 0;
-    }
-    else if ((bestP >= 232) && (bestP <= 626))
-    {
-        pumpVal = 1;
-    }
-    else if ((bestP >= 627) && (bestP <= 834))
-    {
-        pumpVal = 2;
-    }
-    else if ((bestP >= 835) && (bestP <= 1043))
-    {
-        pumpVal = 3;
-    }
-    else
-    {
-        pumpVal = 4;
-    }
-
-    // Clear any existing values
-    for (i = CY22393_REG_LOW; i <= CY22393_REG_HIGH; i++)
-    {
-        write_fpga_clock_reg(i, 0);
-    }
-
-    // Disable PLL3
-    write_fpga_clock_reg(CY22393_REG_PLL3E, 0);
-
-    // Enable Clock A
-    write_fpga_clock_reg(CY22393_REG_CLKA_DIVIDE, 1);
-
-    // Set the CLK A post divider
-    write_fpga_clock_reg(CY22393_REG_CLKA_DIVIDE, postDiv);
-
-    // Disable the other clock outputs
-    write_fpga_clock_reg(CY22393_REG_CLKB_DIVIDE, CY22393_DIVIDE_OFF); // clkb
-    write_fpga_clock_reg(CY22393_REG_CLKC_DIVIDE, CY22393_DIVIDE_OFF); // clkc
-    write_fpga_clock_reg(CY22393_REG_CLKD_DIVIDE, CY22393_DIVIDE_OFF); // clkd
-
-    // Set all clock sources from PLL3
-    write_fpga_clock_reg(CY22393_REG_SOURCE, 0xFF);
-
-    // Set All clocks ACAdj to nominal (b01) with pulldowns enabled and xbuf output enable
-    write_fpga_clock_reg(CY22393_REG_AC, 0x5C);
-    // Set all clocks to use nominal drive strength
-    write_fpga_clock_reg(CY22393_REG_DC, CY22393_DC);
-
-    write_fpga_clock_reg(CY22393_REG_PLL3P, PHigh);
-    write_fpga_clock_reg(CY22393_REG_PLL3Q, bestQ);
-
-    // B6 enables PLL3
-    // B5:B3 is the pump value
-    // B2 is for P0 value
-    // B1:0 is for B9:8 of P
-    write_fpga_clock_reg(CY22393_REG_PLL3E, (1 << 6) | (pumpVal << 3) | (P0 << 2) | ((PHigh & 0x300) >> 8));
 }
 
 /*FUNCTION**********************************************************************
@@ -471,13 +308,7 @@ void init_spi(void)
 
 void init_i2c(uint32_t instance)
 {
-    uint32_t baseAddr = g_i2cBaseAddr[instance];
-    i2c_master_config_t config;
 
-    I2C_MasterGetDefaultConfig(&config);
-
-    I2C_MasterInit((I2C_Type *)baseAddr, &config, get_bus_clock());
-    I2C_MasterTransferCreateHandle((I2C_Type *)baseAddr, &s_i2cHandle, NULL, NULL);
 }
 
 /*FUNCTION**********************************************************************
@@ -488,8 +319,7 @@ void init_i2c(uint32_t instance)
  *END**************************************************************************/
 void deinit_i2c(uint32_t instance)
 {
-    uint32_t baseAddr = g_i2cBaseAddr[instance];
-    I2C_MasterDeinit((I2C_Type *)baseAddr);
+
 }
 
 /*FUNCTION**********************************************************************
@@ -548,7 +378,6 @@ void write_bytes_to_host(uint8_t *src, uint32_t length)
  *END**************************************************************************/
 void configure_i2c_address(uint8_t address)
 {
-    s_i2cUserConfig.slaveAddress = address;
 }
 
 /*FUNCTION**********************************************************************
@@ -559,7 +388,6 @@ void configure_i2c_address(uint8_t address)
  *END**************************************************************************/
 void configure_i2c_speed(uint32_t speedkhz)
 {
-    s_i2cUserConfig.baudRate_kbps = speedkhz;
 }
 
 /*FUNCTION**********************************************************************
@@ -628,20 +456,6 @@ void configure_spi_settings(spi_clock_polarity_t polarity, spi_clock_phase_t pha
  *END**************************************************************************/
 status_t send_i2c_data(uint8_t *src, uint32_t writeLength)
 {
-    i2c_master_transfer_t send_data;
-    uint32_t baseAddr = g_i2cBaseAddr[0];
-    send_data.slaveAddress = s_i2cUserConfig.slaveAddress;
-    send_data.direction = kI2C_Write;
-    send_data.data = src;
-    send_data.dataSize = writeLength;
-
-    if (I2C_MasterTransferBlocking((I2C_Type *)baseAddr, &send_data) != kStatus_Success)
-    {
-        deinit_i2c(0);
-        init_i2c(0);
-        return kStatus_Fail;
-    }
-
     return kStatus_Success;
 }
 
@@ -653,20 +467,6 @@ status_t send_i2c_data(uint8_t *src, uint32_t writeLength)
  *END**************************************************************************/
 status_t receive_i2c_data(uint8_t *dest, uint32_t readLength)
 {
-    i2c_master_transfer_t receive_data;
-    uint32_t baseAddr = g_i2cBaseAddr[0];
-    receive_data.slaveAddress = s_i2cUserConfig.slaveAddress;
-    receive_data.direction = kI2C_Read;
-    receive_data.data = dest;
-    receive_data.dataSize = readLength;
-
-    if (I2C_MasterTransferBlocking((I2C_Type *)baseAddr, &receive_data) != kStatus_Success)
-    {
-        deinit_i2c(0);
-        init_i2c(0);
-        return kStatus_Fail;
-    }
-
     return kStatus_Success;
 }
 

@@ -31,16 +31,6 @@
 #define __BUS_PAL_HARDWARE_H__
 
 #include "spi/fsl_spi.h"
-#include "i2c/fsl_i2c.h"
-
-/*!
- * @brief user config from host for i2c
- */
-typedef struct _i2c_user_config
-{
-    uint8_t slaveAddress;
-    uint16_t baudRate_kbps;
-} i2c_user_config_t;
 
 /*!
  * @brief user config from host for spi
