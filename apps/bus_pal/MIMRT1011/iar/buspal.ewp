@@ -363,6 +363,8 @@
                 <option>
                     <name>CCIncludePath2</name>
                     <state>$PROJ_DIR$/..</state>
+                    <state>$PROJ_DIR$/../../src</state>
+                    <state>$PROJ_DIR$/../../../../src/drivers</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/utilities/str</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/utilities/debug_console_lite</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/drivers</state>
@@ -1465,6 +1467,8 @@
                 <option>
                     <name>CCIncludePath2</name>
                     <state>$PROJ_DIR$/..</state>
+                    <state>$PROJ_DIR$/../../src</state>
+                    <state>$PROJ_DIR$/../../../../src/drivers</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/utilities/str</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/utilities/debug_console_lite</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/drivers</state>
@@ -2565,6 +2569,8 @@
                 <option>
                     <name>CCIncludePath2</name>
                     <state>$PROJ_DIR$/..</state>
+                    <state>$PROJ_DIR$/../../src</state>
+                    <state>$PROJ_DIR$/../../../../src/drivers</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/utilities/str</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/utilities/debug_console_lite</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/drivers</state>
@@ -3665,6 +3671,8 @@
                 <option>
                     <name>CCIncludePath2</name>
                     <state>$PROJ_DIR$/..</state>
+                    <state>$PROJ_DIR$/../../src</state>
+                    <state>$PROJ_DIR$/../../../../src/drivers</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/utilities/str</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/utilities/debug_console_lite</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/drivers</state>
@@ -4767,6 +4775,8 @@
                 <option>
                     <name>CCIncludePath2</name>
                     <state>$PROJ_DIR$/..</state>
+                    <state>$PROJ_DIR$/../../src</state>
+                    <state>$PROJ_DIR$/../../../../src/drivers</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/utilities/str</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/utilities/debug_console_lite</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/drivers</state>
@@ -5867,6 +5877,8 @@
                 <option>
                     <name>CCIncludePath2</name>
                     <state>$PROJ_DIR$/..</state>
+                    <state>$PROJ_DIR$/../../src</state>
+                    <state>$PROJ_DIR$/../../../../src/drivers</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/utilities/str</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/utilities/debug_console_lite</state>
                     <state>$PROJ_DIR$/../../../../src/platform/devices/MIMXRT1011/drivers</state>
@@ -6716,16 +6728,43 @@
             <name>$PROJ_DIR$\..\..\..\..\src\platform\devices\MIMXRT1011\drivers\fsl_iomuxc.h</name>
         </file>
         <file>
+            <name>$PROJ_DIR$\..\..\..\..\src\platform\devices\MIMXRT1011\drivers\fsl_lpspi.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\..\src\platform\devices\MIMXRT1011\drivers\fsl_lpspi.h</name>
+        </file>
+        <file>
             <name>$PROJ_DIR$\..\..\..\..\src\platform\devices\MIMXRT1011\drivers\fsl_lpuart.c</name>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\..\..\src\platform\devices\MIMXRT1011\drivers\fsl_lpuart.h</name>
         </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\..\src\drivers\microseconds\microseconds.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\..\src\drivers\microseconds\src\microseconds_sysclk.c</name>
+        </file>
     </group>
     <group>
         <name>source</name>
         <file>
-            <name>$PROJ_DIR$\..\main.c</name>
+            <name>$PROJ_DIR$\..\bus_pal_hardware.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\bus_pal_hardware.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\buspal_config.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\command_handle.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\command_handle.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\main.c</name>
         </file>
     </group>
     <group>

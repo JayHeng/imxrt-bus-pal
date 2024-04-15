@@ -30,17 +30,17 @@
 #if !defined(__BUS_PAL_HARDWARE_H__)
 #define __BUS_PAL_HARDWARE_H__
 
-#include "spi/fsl_spi.h"
+#include "fsl_lpspi.h"
 
 /*!
  * @brief user config from host for spi
  */
 typedef struct _spi_user_config
 {
-    spi_clock_polarity_t polarity;   /*!< Clock polarity */
-    spi_clock_phase_t phase;         /*!< Clock phase */
-    spi_shift_direction_t direction; /*!< MSB or LSB */
-    uint32_t baudRate_Bps;           /*!< Baud Rate for SPI in Hz */
+    lpspi_clock_polarity_t polarity;   /*!< Clock polarity. */
+    lpspi_clock_phase_t phase;         /*!< Clock phase. */
+    lpspi_shift_direction_t direction; /*!< MSB or LSB data shift direction. */
+    uint32_t baudRate_Bps;             /*!< Baud Rate for LPSPI. */
     uint32_t clock_Hz;
 } spi_user_config_t;
 
@@ -65,7 +65,7 @@ uint32_t get_bytes_received_from_host(void);
 void configure_spi_speed(uint32_t speedkhz);
 
 //! @brief spi config settings process
-void configure_spi_settings(spi_clock_polarity_t polarity, spi_clock_phase_t phase, spi_shift_direction_t direction);
+void configure_spi_settings(lpspi_clock_polarity_t polarity, lpspi_clock_phase_t phase, lpspi_shift_direction_t direction);
 
 //! @brief i2c config address process
 void configure_i2c_address(uint8_t address);

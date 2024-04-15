@@ -31,9 +31,13 @@
 #include "bus_pal_hardware.h"
 #include "fpga_clock_registers.h"
 #include "fsl_device_registers.h"
+#include "pin_mux.h"
+#include "clock_config.h"
+#include "board.h"
+#include "fsl_iomuxc.h"
 #include "microseconds/microseconds.h"
-#include "spi/fsl_spi.h"
-#include "lpsci/fsl_lpsci.h"
+#include "fsl_lpspi.h"
+#include "fsl_lpuart.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 // Prototypes
@@ -65,11 +69,6 @@ static void deinit_i2c(uint32_t instance);
 static void uart_rx_callback(uint8_t byte);
 
 /*!
- * @brief get PORT base address function.
- */
-static PORT_Type *getPortBaseAddrFromAscii(uint8_t port);
-
-/*!
  * @brief get GPIO base address function.
  */
 static GPIO_Type *getGpioBaseAddrFromAscii(uint8_t port);
@@ -79,20 +78,20 @@ static GPIO_Type *getGpioBaseAddrFromAscii(uint8_t port);
 ////////////////////////////////////////////////////////////////////////////////
 
 //! @brief Variable for spi host configuration information
-static spi_user_config_t s_spiUserConfig = {.polarity = kSPI_ClockPolarityActiveLow, /*!< Clock polarity */
-                                            .phase = kSPI_ClockPhaseSecondEdge,      /*!< Clock phase */
-                                            .direction = kSPI_MsbFirst,              /*!< MSB or LSB */
-                                            .baudRate_Bps = 100000,                  /*!< Baud Rate for SPI in Hz */
-                                            .clock_Hz = 0 };
+static spi_user_config_t s_spiUserConfig = {.polarity     = kLPSPI_ClockPolarityActiveLow, /*!< Clock polarity */
+                                            .phase        = kLPSPI_ClockPhaseSecondEdge,   /*!< Clock phase */
+                                            .direction    = kLPSPI_MsbFirst,               /*!< MSB or LSB */
+                                            .baudRate_Bps = 100000,                        /*!< Baud Rate for SPI in Hz */
+                                            .clock_Hz     = 0 };
 
-static spi_master_handle_t s_spiHandle;
+static lpspi_master_handle_t s_spiHandle;
 
 //! @brief Variable for host data receiving
 static uint8_t *s_rxData;
 static uint32_t s_bytesRx;
 
-const static uint32_t g_spiBaseAddr[] = SPI_BASE_ADDRS;
-const static uint32_t g_lpsciBaseAddr[] = UART0_BASE_ADDRS;
+const static uint32_t g_spiBaseAddr[]  = LPSPI_BASE_ADDRS;
+const static uint32_t g_uartBaseAddr[] = LPUART_BASE_ADDRS;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Code
@@ -106,8 +105,7 @@ const static uint32_t g_lpsciBaseAddr[] = UART0_BASE_ADDRS;
  *END**************************************************************************/
 uint32_t get_bus_clock(void)
 {
-    uint32_t busClockDivider = ((SIM->CLKDIV1 & SIM_CLKDIV1_OUTDIV4_MASK) >> SIM_CLKDIV1_OUTDIV4_SHIFT) + 1;
-    return (SystemCoreClock / busClockDivider);
+    return CLOCK_GetFreq(kCLOCK_IpgClk);
 }
 
 /*FUNCTION**********************************************************************
@@ -118,83 +116,26 @@ uint32_t get_bus_clock(void)
  *END**************************************************************************/
 void init_hardware(void)
 {
-    /* SIM->SCGC5: PORTA=1 */
-    SIM->SCGC5 |= (uint32_t)0x0200UL;      /* Enable clock gate for ports to enable pin routing */
-                                           /* SIM->CLKDIV1:
-                                            * OUTDIV1=1,??=0,??=0,??=0,??=0,??=0,??=0,??=0,??=0,??=0,OUTDIV4=1,??=0,??=0,??=0,??=0,??=0,??=0,??=0,??=0,??=0,??=0,??=0,??=0,??=0,??=0,??=0,??=0
-                                            */
-    SIM->CLKDIV1 = (uint32_t)0x10010000UL; /* Update system prescalers */
-    /* PORTA->PCR18: ISF=0,MUX=0 */
-    PORTA->PCR[18] &= (uint32_t)~0x01000700UL;
-    /* PORTA->PCR19: ISF=0,MUX=0 */
-    PORTA->PCR[19] &= (uint32_t)~0x01000700UL;
-    /* Switch to FBE Mode */
-    /* OSC0->CR: ERCLKEN=1,??=0,EREFSTEN=0,??=0,SC2P=1,SC4P=0,SC8P=0,SC16P=1 */
-    OSC0->CR = (uint8_t)0x89U;
-    /* MCG->C2: LOCRE0=0,??=0,RANGE0=2,HGO0=0,EREFS0=1,LP=0,IRCS=0 */
-    MCG->C2 = (uint8_t)0x24U;
-    /* MCG->C1: CLKS=2,FRDIV=3,IREFS=0,IRCLKEN=1,IREFSTEN=0 */
-    MCG->C1 = (uint8_t)0x9AU;
-    /* MCG->C4: DMX32=0,DRST_DRS=0 */
-    MCG->C4 &= (uint8_t) ~(uint8_t)0xE0U;
-    /* MCG->C5: ??=0,PLLCLKEN0=0,PLLSTEN0=0,PRDIV0=1 */
-    MCG->C5 = (uint8_t)0x01U;
-    /* MCG->C6: LOLIE0=0,PLLS=0,CME0=0,VDIV0=0 */
-    MCG->C6 = (uint8_t)0x00U;
-    while ((MCG->S & MCG_S_IREFST_MASK) != 0x00U)
-    { /* Check that the source of the FLL reference clock is the external reference clock. */
-    }
-    while ((MCG->S & 0x0CU) != 0x08U)
-    { /* Wait until external reference clock is selected as MCG output */
-    }
-    /* Switch to PBE Mode */
-    /* MCG->C6: LOLIE0=0,PLLS=1,CME0=0,VDIV0=0 */
-    MCG->C6 = (uint8_t)0x40U;
-    while ((MCG->S & 0x0CU) != 0x08U)
-    { /* Wait until external reference clock is selected as MCG output */
-    }
-    while ((MCG->S & MCG_S_LOCK0_MASK) == 0x00U)
-    { /* Wait until locked */
-    }
-    /* Switch to PEE Mode */
-    /* MCG->C1: CLKS=0,FRDIV=3,IREFS=0,IRCLKEN=1,IREFSTEN=0 */
-    MCG->C1 = (uint8_t)0x1AU;
-    while ((MCG->S & 0x0CU) != 0x0CU)
-    { /* Wait until output of the PLL is selected */
-    }
+    /* Init board hardware. */
+    BOARD_ConfigMPU();
+    BOARD_InitBootPins();
+    BOARD_InitBootClocks();
 
-    SIM->SCGC5 |= (SIM_SCGC5_PORTA_MASK | SIM_SCGC5_PORTB_MASK | SIM_SCGC5_PORTC_MASK | SIM_SCGC5_PORTD_MASK |
-                   SIM_SCGC5_PORTE_MASK);
+    // Enable pins for LPUART1.
+    IOMUXC_SetPinMux(IOMUXC_GPIO_09_LPUART1_RXD, 0U); 
+    IOMUXC_SetPinMux(IOMUXC_GPIO_10_LPUART1_TXD, 0U); 
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_09_LPUART1_RXD, 0x10A0U); 
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_10_LPUART1_TXD, 0x10A0U); 
 
-    SIM->SOPT2 |= SIM_SOPT2_PLLFLLSEL_MASK // set PLLFLLSEL to select the PLL for this clock source
-                  | SIM_SOPT2_UART0SRC(1); // select the PLLFLLCLK as UART0 clock source
-
-    // Enable the pins for the selected UART
-    // Enable the UART_TXD function on PTA1
-    PORTA->PCR[1] = PORT_PCR_MUX(0x2);
-    // Enable the UART_TXD function on PTA2
-    PORTA->PCR[2] = PORT_PCR_MUX(0x2);
-
-    // Enable pins for UART1.
-    PORTC->PCR[3] = PORT_PCR_MUX(3); // UART1_RX is ALT3 for pin PTC3
-    PORTC->PCR[4] = PORT_PCR_MUX(3); // UART1_TX is ALT3 for pin PTC4
-
-    // Enable pins for I2C0.
-    PORTC->PCR[8] = PORT_PCR_MUX(2); // I2C0_SCL is ALT2 for pin PTC8
-    PORTC->PCR[9] = PORT_PCR_MUX(2); // I2C0_SDA is ALT2 for pin PTC9
-
-    // Enable pins for I2C1.
-    PORTE->PCR[0] = PORT_PCR_MUX(6); // I2C1_SDA is ALT6 for pin PTE0
-    PORTE->PCR[1] = PORT_PCR_MUX(6); // I2C1_SCL is ALT6 for pin PTE1
-
-    // Enable pins for SPI0 on PTD0~3 (not available on 32-pin QFN package)
-    PORTD->PCR[0] = PORT_PCR_MUX(2); // SPI0_PCS0 is ALT2 for pin PTD0
-    PORTD->PCR[1] = PORT_PCR_MUX(2); // SPI0_SCK is ALT2 for pin PTD1
-    PORTD->PCR[2] = PORT_PCR_MUX(2); // SPI0_MOSI is ALT2 for pin PTD2
-    PORTD->PCR[3] = PORT_PCR_MUX(2); // SPI0_MISO is ALT2 for pin PTD3
-
-    // Ungate clocks to the UART modules
-    SIM->SCGC4 |= (SIM_SCGC4_UART0_MASK | SIM_SCGC4_UART1_MASK | SIM_SCGC4_UART2_MASK);
+    // Enable pins for LPSPI1
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_03_LPSPI1_SDI, 0U); 
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_04_LPSPI1_SDO, 0U); 
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_05_LPSPI1_PCS0, 0U); 
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_06_LPSPI1_SCK, 0U); 
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_03_LPSPI1_SDI, 0x10A0U); 
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_04_LPSPI1_SDO, 0x10A0U); 
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_05_LPSPI1_PCS0, 0x10A0U); 
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_06_LPSPI1_SCK, 0x10A0U); 
 
     microseconds_init();
 
@@ -204,30 +145,17 @@ void init_hardware(void)
 
 /*FUNCTION**********************************************************************
  *
- * Function Name : uart0_get_clock
- * Description   : get uart0 clock
+ * Function Name : uart_get_clock
+ * Description   : get lpuart clock
  *
  *END**************************************************************************/
-uint32_t uart0_get_clock(uint32_t instance)
+uint32_t uart_get_clock(uint32_t instance)
 {
     switch (instance)
     {
-        case 0:
-        {
-            return (((CPU_XTAL_CLK_HZ * 24) / 2) / 2);
-        }
         case 1:
         {
-            // UART1 always uses the system clock / OUTDIV4
-            const uint32_t busClockDivider =
-                ((SIM->CLKDIV1 & SIM_CLKDIV1_OUTDIV4_MASK) >> SIM_CLKDIV1_OUTDIV4_SHIFT) + 1;
-            return (SystemCoreClock / busClockDivider);
-        }
-        case 2:
-        {
-            // UART2 always uses the system clock / OUTDIV4
-            uint32_t busClockDivider = ((SIM->CLKDIV1 & SIM_CLKDIV1_OUTDIV4_MASK) >> SIM_CLKDIV1_OUTDIV4_SHIFT) + 1;
-            return (SystemCoreClock / busClockDivider);
+            return BOARD_DebugConsoleSrcFreq();
         }
         default:
             return 0;
@@ -242,28 +170,37 @@ uint32_t uart0_get_clock(uint32_t instance)
  *END**************************************************************************/
 static void init_uarts(void)
 {
-    lpsci_config_t config;
-    uint32_t baseAddr = g_lpsciBaseAddr[0];
+    lpuart_config_t config;
+    uint32_t baseAddr = g_uartBaseAddr[1];
 
-    LPSCI_GetDefaultConfig(&config);
-
+    /*
+     * config.baudRate_Bps = 115200U;
+     * config.parityMode = kLPUART_ParityDisabled;
+     * config.stopBitCount = kLPUART_OneStopBit;
+     * config.txFifoWatermark = 0;
+     * config.rxFifoWatermark = 0;
+     * config.enableTx = false;
+     * config.enableRx = false;
+     */
+    LPUART_GetDefaultConfig(&config);
     config.baudRate_Bps = 57600;
-    config.enableRx = true;
-    config.enableTx = true;
+    config.enableTx     = true;
+    config.enableRx     = true;
 
-    LPSCI_Init((UART0_Type *)baseAddr, &config, uart0_get_clock(0));
-    LPSCI_EnableInterrupts((UART0_Type *)baseAddr, kLPSCI_RxDataRegFullInterruptEnable);
-    NVIC_EnableIRQ(UART0_IRQn);
+    LPUART_Init((LPUART_Type *)baseAddr, &config, uart_get_clock(1));
+    LPUART_EnableInterrupts((LPUART_Type *)baseAddr, kLPUART_RxDataRegFullInterruptEnable);
+    EnableIRQ(LPUART1_IRQn);
 }
 
 /********************************************************************/
 /*
- * UART0 IRQ Handler
+ * UART IRQ Handler
  *
  */
-void UART0_IRQHandler(void)
+void LPUART1_IRQHandler(void)
 {
-    uart_rx_callback(UART0->D);
+    uint32_t baseAddr = g_uartBaseAddr[1];
+    uart_rx_callback(LPUART_ReadByte((LPUART_Type *)baseAddr));
 }
 
 /*FUNCTION**********************************************************************
@@ -283,20 +220,37 @@ void set_fpga_clock(uint32_t clock)
  *
  *END**************************************************************************/
 
+/* Select USB1 PLL PFD0 (720 MHz) as lpspi clock source */
+#define APP_LPSPI_CLOCK_SOURCE_SELECT (1U)
+/* Clock divider for master lpspi clock source */
+#define APP_LPSPI_CLOCK_SOURCE_DIVIDER (7U)
+
+#define LPSPI_MASTER_CLK_FREQ (CLOCK_GetFreq(kCLOCK_Usb1PllPfd0Clk) / (APP_LPSPI_CLOCK_SOURCE_DIVIDER + 1U))
+
 void init_spi(void)
 {
-    spi_master_config_t config;
-    uint32_t baseAddr = g_spiBaseAddr[0];
+    lpspi_master_config_t config;
+    uint32_t baseAddr = g_spiBaseAddr[1];
 
-    SPI_MasterGetDefaultConfig(&config);
+    /*Set clock source for LPSPI*/
+    CLOCK_SetMux(kCLOCK_LpspiMux, APP_LPSPI_CLOCK_SOURCE_SELECT);
+    CLOCK_SetDiv(kCLOCK_LpspiDiv, APP_LPSPI_CLOCK_SOURCE_DIVIDER);
 
-    config.polarity = s_spiUserConfig.polarity;
-    config.phase = s_spiUserConfig.phase;
-    config.baudRate_Bps = s_spiUserConfig.baudRate_Bps;
-    s_spiUserConfig.clock_Hz = get_bus_clock();
+    LPSPI_MasterGetDefaultConfig(&config);
 
-    SPI_MasterInit((SPI_Type *)baseAddr, &config, s_spiUserConfig.clock_Hz);
-    SPI_MasterTransferCreateHandle((SPI_Type *)baseAddr, &s_spiHandle, NULL, NULL);
+    config.cpol = s_spiUserConfig.polarity;
+    config.cpha = s_spiUserConfig.phase;
+    config.baudRate = s_spiUserConfig.baudRate_Bps;
+
+    config.whichPcs = kLPSPI_Pcs0;
+    config.pcsToSckDelayInNanoSec        = 1000000000U / (config.baudRate * 2U);
+    config.lastSckToPcsDelayInNanoSec    = 1000000000U / (config.baudRate * 2U);
+    config.betweenTransferDelayInNanoSec = 1000000000U / (config.baudRate * 2U);
+
+    s_spiUserConfig.clock_Hz = LPSPI_MASTER_CLK_FREQ;
+
+    LPSPI_MasterInit((LPSPI_Type *)baseAddr, &config, s_spiUserConfig.clock_Hz);
+    LPSPI_MasterTransferCreateHandle((LPSPI_Type *)baseAddr, &s_spiHandle, NULL, NULL);
 }
 
 /*FUNCTION**********************************************************************
@@ -365,9 +319,9 @@ uint32_t get_bytes_received_from_host(void)
  *END**************************************************************************/
 void write_bytes_to_host(uint8_t *src, uint32_t length)
 {
-    uint32_t baseAddr = g_lpsciBaseAddr[0];
+    uint32_t baseAddr = g_uartBaseAddr[1];
 
-    LPSCI_TransferSendBlocking((UART0_Type *)baseAddr, src, length);
+    LPUART_WriteBlocking((LPUART_Type *)baseAddr, src, length);
 }
 
 /*FUNCTION**********************************************************************
@@ -398,13 +352,14 @@ void configure_i2c_speed(uint32_t speedkhz)
  *END**************************************************************************/
 void send_spi_data(uint8_t *src, uint32_t writeLength)
 {
-    spi_transfer_t send_data;
-    uint32_t baseAddr = g_spiBaseAddr[0];
+    lpspi_transfer_t send_data;
+    uint32_t baseAddr = g_spiBaseAddr[1];
 
     send_data.txData = src;
     send_data.dataSize = writeLength;
     send_data.rxData = NULL;
-    SPI_MasterTransferBlocking((SPI_Type *)baseAddr, &send_data);
+    send_data.configFlags = kLPSPI_MasterPcs0 | kLPSPI_MasterPcsContinuous | kLPSPI_MasterByteSwap;
+    LPSPI_MasterTransferBlocking((LPSPI_Type *)baseAddr, &send_data);
 }
 
 /*FUNCTION**********************************************************************
@@ -415,13 +370,14 @@ void send_spi_data(uint8_t *src, uint32_t writeLength)
  *END**************************************************************************/
 void receive_spi_data(uint8_t *dest, uint32_t readLength)
 {
-    spi_transfer_t receive_data;
-    uint32_t baseAddr = g_spiBaseAddr[0];
+    lpspi_transfer_t receive_data;
+    uint32_t baseAddr = g_spiBaseAddr[1];
 
     receive_data.rxData = dest;
     receive_data.dataSize = readLength;
     receive_data.txData = NULL;
-    SPI_MasterTransferBlocking((SPI_Type *)baseAddr, &receive_data);
+    receive_data.configFlags = kLPSPI_MasterPcs0 | kLPSPI_MasterPcsContinuous | kLPSPI_MasterByteSwap;
+    LPSPI_MasterTransferBlocking((LPSPI_Type *)baseAddr, &receive_data);
 }
 
 /*FUNCTION**********************************************************************
@@ -441,7 +397,7 @@ void configure_spi_speed(uint32_t speedkhz)
  * Description   : spi config settings process
  *
  *END**************************************************************************/
-void configure_spi_settings(spi_clock_polarity_t polarity, spi_clock_phase_t phase, spi_shift_direction_t direction)
+void configure_spi_settings(lpspi_clock_polarity_t polarity, lpspi_clock_phase_t phase, lpspi_shift_direction_t direction)
 {
     s_spiUserConfig.polarity = polarity;
     s_spiUserConfig.phase = phase;
@@ -486,67 +442,26 @@ void uart_rx_callback(uint8_t byte)
 
 /*FUNCTION**********************************************************************
  *
- * Function Name : getPortBaseAddrFromAscii
- * Description   : PORT get base address function
- *
- *END**************************************************************************/
-PORT_Type *getPortBaseAddrFromAscii(uint8_t port)
-{
-    if ((port >= 'a') && (port <= 'e'))
-    {
-        port = port - 'a';
-    }
-    else if ((port >= 'A') && (port <= 'E'))
-    {
-        port = port - 'A';
-    }
-
-    switch (port)
-    {
-        default:
-        case 0:
-            return PORTA;
-        case 1:
-            return PORTB;
-        case 2:
-            return PORTC;
-        case 3:
-            return PORTD;
-        case 4:
-            return PORTE;
-    }
-}
-
-/*FUNCTION**********************************************************************
- *
  * Function Name : getGpioBaseAddrFromAscii
  * Description   : GPIO get base address function
  *
  *END**************************************************************************/
 GPIO_Type *getGpioBaseAddrFromAscii(uint8_t port)
 {
-    if ((port >= 'a') && (port <= 'e'))
+    if ((port >= '1') && (port <= '5'))
     {
-        port = port - 'a';
-    }
-    else if ((port >= 'A') && (port <= 'E'))
-    {
-        port = port - 'A';
+        port = port - '1';
     }
 
     switch (port)
     {
         default:
-        case 0:
-            return GPIOA;
         case 1:
-            return GPIOB;
+            return GPIO1;
         case 2:
-            return GPIOC;
-        case 3:
-            return GPIOD;
-        case 4:
-            return GPIOE;
+            return GPIO2;
+        case 5:
+            return GPIO5;
     }
 }
 
@@ -558,8 +473,7 @@ GPIO_Type *getGpioBaseAddrFromAscii(uint8_t port)
  *END**************************************************************************/
 void configure_gpio(uint8_t port, uint8_t pinNum, uint8_t muxVal)
 {
-    PORT_Type *realPort = getPortBaseAddrFromAscii(port);
-    realPort->PCR[pinNum] = ((~PORT_PCR_MUX_MASK) & realPort->PCR[pinNum]) | PORT_PCR_MUX(muxVal);
+
 }
 
 /*FUNCTION**********************************************************************
@@ -572,15 +486,15 @@ void set_gpio(uint8_t port, uint8_t pinNum, uint8_t level)
 {
     GPIO_Type *realPort = getGpioBaseAddrFromAscii(port);
 
-    realPort->PDDR |= 1 << pinNum;
+    realPort->GDIR |= 1 << pinNum;
 
     if (level)
     {
-        realPort->PSOR |= 1 << pinNum;
+        realPort->DR |= 1 << pinNum;
     }
     else
     {
-        realPort->PCOR |= 1 << pinNum;
+        realPort->DR &= ~(1 << pinNum);
     }
 }
 

@@ -286,7 +286,7 @@ extern void init_hardware(void);
  * Description   : get 16 bit from buffer
  *
  *END**************************************************************************/
-inline uint16_t uint16_from_buffer(uint8_t *buffer)
+static inline uint16_t uint16_from_buffer(uint8_t *buffer)
 {
     return (((uint32_t)buffer[1] << 8) | (uint32_t)buffer[0]);
 }
@@ -297,7 +297,7 @@ inline uint16_t uint16_from_buffer(uint8_t *buffer)
  * Description   : get 32 bit from buffer
  *
  *END**************************************************************************/
-inline uint32_t uint32_from_buffer(uint8_t *buffer)
+static inline uint32_t uint32_from_buffer(uint8_t *buffer)
 {
     return (((uint32_t)buffer[3] << 24) | ((uint32_t)buffer[2] << 16) | ((uint32_t)buffer[1] << 8) |
             (uint32_t)buffer[0]);
@@ -607,6 +607,11 @@ static void handleSpiConfigCommand(uint8_t configMask)
     dspi_clock_polarity_t polarity = (dspi_clock_polarity_t)((configMask >> kSpiConfigShift_Polarity) & 1);
     dspi_clock_phase_t phase = (dspi_clock_phase_t)((configMask >> kSpiConfigShift_Phase) & 1);
     dspi_shift_direction_t direction = (dspi_shift_direction_t)((configMask >> kSpiConfigShift_Direction) & 1);
+#endif
+#if defined(CPU_MIMXRT1011DAE5A)
+    lpspi_clock_polarity_t polarity = (lpspi_clock_polarity_t)((configMask >> kSpiConfigShift_Polarity) & 1);
+    lpspi_clock_phase_t phase = (lpspi_clock_phase_t)((configMask >> kSpiConfigShift_Phase) & 1);
+    lpspi_shift_direction_t direction = (lpspi_shift_direction_t)((configMask >> kSpiConfigShift_Direction) & 1);
 #endif
     configure_spi_settings(polarity, phase, direction);
 
