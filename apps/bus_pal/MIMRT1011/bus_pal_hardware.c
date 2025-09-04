@@ -128,6 +128,8 @@ void init_hardware(void)
     IOMUXC_SetPinConfig(IOMUXC_GPIO_10_LPUART1_TXD, 0x10A0U); 
 
     // Enable pins for LPSPI1
+    // RT1010-EVK Rev.C - J57.6/8/10/12
+    // but when they are connected to RT1180-EVK, J57-6/8/12 pin low level can only be 2.5V without any rework
     IOMUXC_SetPinMux(IOMUXC_GPIO_AD_03_LPSPI1_SDI, 0U); 
     IOMUXC_SetPinMux(IOMUXC_GPIO_AD_04_LPSPI1_SDO, 0U); 
     IOMUXC_SetPinMux(IOMUXC_GPIO_AD_05_LPSPI1_PCS0, 0U); 
