@@ -4650,10 +4650,22 @@
             <name>$PROJ_DIR$\..\..\..\..\src\platform\devices\MIMXRT685S\drivers\fsl_reset.h</name>
         </file>
         <file>
+            <name>$PROJ_DIR$\..\..\..\..\src\platform\devices\MIMXRT685S\drivers\fsl_spi.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\..\src\platform\devices\MIMXRT685S\drivers\fsl_spi.h</name>
+        </file>
+        <file>
             <name>$PROJ_DIR$\..\..\..\..\src\platform\devices\MIMXRT685S\drivers\fsl_usart.c</name>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\..\..\src\platform\devices\MIMXRT685S\drivers\fsl_usart.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\..\src\drivers\microseconds\microseconds.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\..\src\drivers\microseconds\src\microseconds_sysclk.c</name>
         </file>
     </group>
     <group>
@@ -4674,7 +4686,22 @@
     <group>
         <name>source</name>
         <file>
-            <name>$PROJ_DIR$\..\main.c</name>
+            <name>$PROJ_DIR$\..\bus_pal_hardware.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\bus_pal_hardware.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\buspal_config.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\command_handle.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\command_handle.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\main.c</name>
         </file>
     </group>
     <group>

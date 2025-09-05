@@ -34,10 +34,11 @@
 #include "pin_mux.h"
 #include "clock_config.h"
 #include "board.h"
-#include "fsl_iomuxc.h"
+#include "fsl_iopctl.h"
 #include "microseconds/microseconds.h"
-#include "fsl_lpspi.h"
-#include "fsl_lpuart.h"
+#include "fsl_flexcomm.h"
+#include "fsl_spi.h"
+#include "fsl_usart.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 // Prototypes
@@ -78,20 +79,20 @@ static GPIO_Type *getGpioBaseAddrFromAscii(uint8_t port);
 ////////////////////////////////////////////////////////////////////////////////
 
 //! @brief Variable for spi host configuration information
-static spi_user_config_t s_spiUserConfig = {.polarity     = kLPSPI_ClockPolarityActiveLow, /*!< Clock polarity */
-                                            .phase        = kLPSPI_ClockPhaseSecondEdge,   /*!< Clock phase */
-                                            .direction    = kLPSPI_MsbFirst,               /*!< MSB or LSB */
+static spi_user_config_t s_spiUserConfig = {.polarity     = kSPI_ClockPolarityActiveLow, /*!< Clock polarity */
+                                            .phase        = kSPI_ClockPhaseSecondEdge,   /*!< Clock phase */
+                                            .direction    = kSPI_MsbFirst,               /*!< MSB or LSB */
                                             .baudRate_Bps = 100000,                        /*!< Baud Rate for SPI in Hz */
                                             .clock_Hz     = 0 };
 
-static lpspi_master_handle_t s_spiHandle;
+static spi_master_handle_t s_spiHandle;
 
 //! @brief Variable for host data receiving
 static uint8_t *s_rxData;
 static uint32_t s_bytesRx;
 
-const static uint32_t g_spiBaseAddr[]  = LPSPI_BASE_ADDRS;
-const static uint32_t g_uartBaseAddr[] = LPUART_BASE_ADDRS;
+const static uint32_t g_spiBaseAddr[]  = SPI_BASE_ADDRS;
+const static uint32_t g_uartBaseAddr[] = USART_BASE_ADDRS;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Code
@@ -105,7 +106,7 @@ const static uint32_t g_uartBaseAddr[] = LPUART_BASE_ADDRS;
  *END**************************************************************************/
 uint32_t get_bus_clock(void)
 {
-    return CLOCK_GetFreq(kCLOCK_IpgClk);
+    return CLOCK_GetFreq(kCLOCK_BusClk);
 }
 
 /*FUNCTION**********************************************************************
@@ -117,27 +118,137 @@ uint32_t get_bus_clock(void)
 void init_hardware(void)
 {
     /* Init board hardware. */
-    BOARD_ConfigMPU();
     BOARD_InitBootPins();
     BOARD_InitBootClocks();
 
-    // Enable pins for LPUART1.
-    IOMUXC_SetPinMux(IOMUXC_GPIO_09_LPUART1_RXD, 0U); 
-    IOMUXC_SetPinMux(IOMUXC_GPIO_10_LPUART1_TXD, 0U); 
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_09_LPUART1_RXD, 0x10A0U); 
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_10_LPUART1_TXD, 0x10A0U); 
+    // Enable pins for Flexcomm0 USART.
+    const uint32_t port0_pin1_config = (/* Pin is configured as FC0_TXD_SCL_MISO_WS */
+                                        IOPCTL_PIO_FUNC1 |
+                                        /* Disable pull-up / pull-down function */
+                                        IOPCTL_PIO_PUPD_DI |
+                                        /* Enable pull-down function */
+                                        IOPCTL_PIO_PULLDOWN_EN |
+                                        /* Disable input buffer function */
+                                        IOPCTL_PIO_INBUF_DI |
+                                        /* Normal mode */
+                                        IOPCTL_PIO_SLEW_RATE_NORMAL |
+                                        /* Normal drive */
+                                        IOPCTL_PIO_FULLDRIVE_DI |
+                                        /* Analog mux is disabled */
+                                        IOPCTL_PIO_ANAMUX_DI |
+                                        /* Pseudo Output Drain is disabled */
+                                        IOPCTL_PIO_PSEDRAIN_DI |
+                                        /* Input function is not inverted */
+                                        IOPCTL_PIO_INV_DI);
+    /* PORT0 PIN1 (coords: G2) is configured as FC0_TXD_SCL_MISO_WS */
+    IOPCTL_PinMuxSet(IOPCTL, 0U, 1U, port0_pin1_config);
 
-    // Enable pins for LPSPI1
-    // RT1010-EVK Rev.C - J57.6/8/10/12
-    // but when they are connected to RT1180-EVK, J57-6/8/12 pin low level can only be 2.5V without any rework
-    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_03_LPSPI1_SDI, 0U); 
-    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_04_LPSPI1_SDO, 0U); 
-    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_05_LPSPI1_PCS0, 0U); 
-    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_06_LPSPI1_SCK, 0U); 
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_03_LPSPI1_SDI, 0x10A0U); 
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_04_LPSPI1_SDO, 0x10A0U); 
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_05_LPSPI1_PCS0, 0x10A0U); 
-    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_06_LPSPI1_SCK, 0x10A0U); 
+    const uint32_t port0_pin2_config = (/* Pin is configured as FC0_RXD_SDA_MOSI_DATA */
+                                        IOPCTL_PIO_FUNC1 |
+                                        /* Disable pull-up / pull-down function */
+                                        IOPCTL_PIO_PUPD_DI |
+                                        /* Enable pull-down function */
+                                        IOPCTL_PIO_PULLDOWN_EN |
+                                        /* Enables input buffer function */
+                                        IOPCTL_PIO_INBUF_EN |
+                                        /* Normal mode */
+                                        IOPCTL_PIO_SLEW_RATE_NORMAL |
+                                        /* Normal drive */
+                                        IOPCTL_PIO_FULLDRIVE_DI |
+                                        /* Analog mux is disabled */
+                                        IOPCTL_PIO_ANAMUX_DI |
+                                        /* Pseudo Output Drain is disabled */
+                                        IOPCTL_PIO_PSEDRAIN_DI |
+                                        /* Input function is not inverted */
+                                        IOPCTL_PIO_INV_DI);
+    /* PORT0 PIN2 (coords: G4) is configured as FC0_RXD_SDA_MOSI_DATA */
+    IOPCTL_PinMuxSet(IOPCTL, 0U, 2U, port0_pin2_config);
+
+    // Enable pins for Flexcomm5 SPI
+    // RT685-EVK Rev.Ex - J28.3/4/5/6
+    const uint32_t port1_pin3_config = (/* Pin is configured as FC5_SCK */
+                                        IOPCTL_PIO_FUNC1 |
+                                        /* Disable pull-up / pull-down function */
+                                        IOPCTL_PIO_PUPD_DI |
+                                        /* Enable pull-down function */
+                                        IOPCTL_PIO_PULLDOWN_EN |
+                                        /* Enables input buffer function */
+                                        IOPCTL_PIO_INBUF_EN |
+                                        /* Normal mode */
+                                        IOPCTL_PIO_SLEW_RATE_NORMAL |
+                                        /* Normal drive */
+                                        IOPCTL_PIO_FULLDRIVE_DI |
+                                        /* Analog mux is disabled */
+                                        IOPCTL_PIO_ANAMUX_DI |
+                                        /* Pseudo Output Drain is disabled */
+                                        IOPCTL_PIO_PSEDRAIN_DI |
+                                        /* Input function is not inverted */
+                                        IOPCTL_PIO_INV_DI);
+    /* PORT1 PIN3 (coords: G16) is configured as FC5_SCK */
+    IOPCTL_PinMuxSet(IOPCTL, 1U, 3U, port1_pin3_config);
+
+    const uint32_t port1_pin4_config = (/* Pin is configured as FC5_TXD_SCL_MISO_WS */
+                                        IOPCTL_PIO_FUNC1 |
+                                        /* Disable pull-up / pull-down function */
+                                        IOPCTL_PIO_PUPD_DI |
+                                        /* Enable pull-down function */
+                                        IOPCTL_PIO_PULLDOWN_EN |
+                                        /* Enables input buffer function */
+                                        IOPCTL_PIO_INBUF_EN |
+                                        /* Normal mode */
+                                        IOPCTL_PIO_SLEW_RATE_NORMAL |
+                                        /* Normal drive */
+                                        IOPCTL_PIO_FULLDRIVE_DI |
+                                        /* Analog mux is disabled */
+                                        IOPCTL_PIO_ANAMUX_DI |
+                                        /* Pseudo Output Drain is disabled */
+                                        IOPCTL_PIO_PSEDRAIN_DI |
+                                        /* Input function is not inverted */
+                                        IOPCTL_PIO_INV_DI);
+    /* PORT1 PIN4 (coords: G17) is configured as FC5_TXD_SCL_MISO_WS */
+    IOPCTL_PinMuxSet(IOPCTL, 1U, 4U, port1_pin4_config);
+
+    const uint32_t port1_pin5_config = (/* Pin is configured as FC5_RXD_SDA_MOSI_DATA */
+                                        IOPCTL_PIO_FUNC1 |
+                                        /* Disable pull-up / pull-down function */
+                                        IOPCTL_PIO_PUPD_DI |
+                                        /* Enable pull-down function */
+                                        IOPCTL_PIO_PULLDOWN_EN |
+                                        /* Enables input buffer function */
+                                        IOPCTL_PIO_INBUF_EN |
+                                        /* Normal mode */
+                                        IOPCTL_PIO_SLEW_RATE_NORMAL |
+                                        /* Normal drive */
+                                        IOPCTL_PIO_FULLDRIVE_DI |
+                                        /* Analog mux is disabled */
+                                        IOPCTL_PIO_ANAMUX_DI |
+                                        /* Pseudo Output Drain is disabled */
+                                        IOPCTL_PIO_PSEDRAIN_DI |
+                                        /* Input function is not inverted */
+                                        IOPCTL_PIO_INV_DI);
+    /* PORT1 PIN5 (coords: J16) is configured as FC5_RXD_SDA_MOSI_DATA */
+    IOPCTL_PinMuxSet(IOPCTL, 1U, 5U, port1_pin5_config);
+
+    const uint32_t port1_pin6_config = (/* Pin is configured as FC5_CTS_SDA_SSEL0 */
+                                        IOPCTL_PIO_FUNC1 |
+                                        /* Disable pull-up / pull-down function */
+                                        IOPCTL_PIO_PUPD_DI |
+                                        /* Enable pull-down function */
+                                        IOPCTL_PIO_PULLDOWN_EN |
+                                        /* Enables input buffer function */
+                                        IOPCTL_PIO_INBUF_EN |
+                                        /* Normal mode */
+                                        IOPCTL_PIO_SLEW_RATE_NORMAL |
+                                        /* Normal drive */
+                                        IOPCTL_PIO_FULLDRIVE_DI |
+                                        /* Analog mux is disabled */
+                                        IOPCTL_PIO_ANAMUX_DI |
+                                        /* Pseudo Output Drain is disabled */
+                                        IOPCTL_PIO_PSEDRAIN_DI |
+                                        /* Input function is not inverted */
+                                        IOPCTL_PIO_INV_DI);
+    /* PORT1 PIN6 (coords: J17) is configured as FC5_CTS_SDA_SSEL0 */
+    IOPCTL_PinMuxSet(IOPCTL, 1U, 6U, port1_pin6_config);
 
     microseconds_init();
 
@@ -148,16 +259,16 @@ void init_hardware(void)
 /*FUNCTION**********************************************************************
  *
  * Function Name : uart_get_clock
- * Description   : get lpuart clock
+ * Description   : get usart clock
  *
  *END**************************************************************************/
 uint32_t uart_get_clock(uint32_t instance)
 {
     switch (instance)
     {
-        case 1:
+        case 0:
         {
-            return BOARD_DebugConsoleSrcFreq();
+            return CLOCK_GetFlexCommClkFreq(0U);
         }
         default:
             return 0;
@@ -172,37 +283,36 @@ uint32_t uart_get_clock(uint32_t instance)
  *END**************************************************************************/
 static void init_uarts(void)
 {
-    lpuart_config_t config;
-    uint32_t baseAddr = g_uartBaseAddr[1];
+    usart_config_t config;
+    uint32_t baseAddr = g_uartBaseAddr[0];
 
     /*
      * config.baudRate_Bps = 115200U;
-     * config.parityMode = kLPUART_ParityDisabled;
-     * config.stopBitCount = kLPUART_OneStopBit;
-     * config.txFifoWatermark = 0;
-     * config.rxFifoWatermark = 0;
-     * config.enableTx = false;
-     * config.enableRx = false;
+     * config.parityMode = kUSART_ParityDisabled;
+     * config.stopBitCount = kUSART_OneStopBit;
+     * config.loopback = false;
+     * config.enableTxFifo = false;
+     * config.enableRxFifo = false;
      */
-    LPUART_GetDefaultConfig(&config);
+    USART_GetDefaultConfig(&config);
     config.baudRate_Bps = 57600;
     config.enableTx     = true;
     config.enableRx     = true;
 
-    LPUART_Init((LPUART_Type *)baseAddr, &config, uart_get_clock(1));
-    LPUART_EnableInterrupts((LPUART_Type *)baseAddr, kLPUART_RxDataRegFullInterruptEnable);
-    EnableIRQ(LPUART1_IRQn);
+    USART_Init((USART_Type *)baseAddr, &config, uart_get_clock(0));
+    USART_EnableInterrupts((USART_Type *)baseAddr, kUSART_RxLevelInterruptEnable);
+    EnableIRQ(FLEXCOMM0_IRQn);
 }
 
 /********************************************************************/
 /*
- * UART IRQ Handler
+ * USART IRQ Handler
  *
  */
-void LPUART1_IRQHandler(void)
+void FLEXCOMM0_IRQHandler(void)
 {
-    uint32_t baseAddr = g_uartBaseAddr[1];
-    uart_rx_callback(LPUART_ReadByte((LPUART_Type *)baseAddr));
+    uint32_t baseAddr = g_uartBaseAddr[0];
+    uart_rx_callback(USART_ReadByte((USART_Type *)baseAddr));
 }
 
 /*FUNCTION**********************************************************************
@@ -222,37 +332,27 @@ void set_fpga_clock(uint32_t clock)
  *
  *END**************************************************************************/
 
-/* Select USB1 PLL PFD0 (720 MHz) as lpspi clock source */
-#define APP_LPSPI_CLOCK_SOURCE_SELECT (1U)
-/* Clock divider for master lpspi clock source */
-#define APP_LPSPI_CLOCK_SOURCE_DIVIDER (7U)
-
-#define LPSPI_MASTER_CLK_FREQ (CLOCK_GetFreq(kCLOCK_Usb1PllPfd0Clk) / (APP_LPSPI_CLOCK_SOURCE_DIVIDER + 1U))
-
 void init_spi(void)
 {
-    lpspi_master_config_t config;
-    uint32_t baseAddr = g_spiBaseAddr[1];
+    spi_master_config_t config;
+    uint32_t baseAddr = g_spiBaseAddr[5];
 
-    /*Set clock source for LPSPI*/
-    CLOCK_SetMux(kCLOCK_LpspiMux, APP_LPSPI_CLOCK_SOURCE_SELECT);
-    CLOCK_SetDiv(kCLOCK_LpspiDiv, APP_LPSPI_CLOCK_SOURCE_DIVIDER);
+    /*Set clock source for SPI*/
+    CLOCK_AttachClk(kSFRO_to_FLEXCOMM5);
 
-    LPSPI_MasterGetDefaultConfig(&config);
+    SPI_MasterGetDefaultConfig(&config);
 
-    config.cpol = s_spiUserConfig.polarity;
-    config.cpha = s_spiUserConfig.phase;
-    config.baudRate = s_spiUserConfig.baudRate_Bps;
+    config.polarity = s_spiUserConfig.polarity;
+    config.phase = s_spiUserConfig.phase;
+    config.baudRate_Bps = s_spiUserConfig.baudRate_Bps;
 
-    config.whichPcs = kLPSPI_Pcs0;
-    config.pcsToSckDelayInNanoSec        = 1000000000U / (config.baudRate * 2U);
-    config.lastSckToPcsDelayInNanoSec    = 1000000000U / (config.baudRate * 2U);
-    config.betweenTransferDelayInNanoSec = 1000000000U / (config.baudRate * 2U);
+    config.sselNum = (spi_ssel_t)0;
+    config.sselPol = (spi_spol_t)kSPI_SpolActiveAllLow;
 
-    s_spiUserConfig.clock_Hz = LPSPI_MASTER_CLK_FREQ;
+    s_spiUserConfig.clock_Hz = CLOCK_GetFlexCommClkFreq(5U);
 
-    LPSPI_MasterInit((LPSPI_Type *)baseAddr, &config, s_spiUserConfig.clock_Hz);
-    LPSPI_MasterTransferCreateHandle((LPSPI_Type *)baseAddr, &s_spiHandle, NULL, NULL);
+    SPI_MasterInit((SPI_Type *)baseAddr, &config, s_spiUserConfig.clock_Hz);
+    SPI_MasterTransferCreateHandle((SPI_Type *)baseAddr, &s_spiHandle, NULL, NULL);
 }
 
 /*FUNCTION**********************************************************************
@@ -321,9 +421,9 @@ uint32_t get_bytes_received_from_host(void)
  *END**************************************************************************/
 void write_bytes_to_host(uint8_t *src, uint32_t length)
 {
-    uint32_t baseAddr = g_uartBaseAddr[1];
+    uint32_t baseAddr = g_uartBaseAddr[0];
 
-    LPUART_WriteBlocking((LPUART_Type *)baseAddr, src, length);
+    USART_WriteBlocking((USART_Type *)baseAddr, src, length);
 }
 
 /*FUNCTION**********************************************************************
@@ -354,14 +454,14 @@ void configure_i2c_speed(uint32_t speedkhz)
  *END**************************************************************************/
 void send_spi_data(uint8_t *src, uint32_t writeLength)
 {
-    lpspi_transfer_t send_data;
-    uint32_t baseAddr = g_spiBaseAddr[1];
+    spi_transfer_t send_data;
+    uint32_t baseAddr = g_spiBaseAddr[5];
 
     send_data.txData = src;
     send_data.dataSize = writeLength;
     send_data.rxData = NULL;
-    send_data.configFlags = kLPSPI_MasterPcs0 | kLPSPI_MasterPcsContinuous | kLPSPI_MasterByteSwap;
-    LPSPI_MasterTransferBlocking((LPSPI_Type *)baseAddr, &send_data);
+    send_data.configFlags = kSPI_FrameAssert;
+    SPI_MasterTransferBlocking((SPI_Type *)baseAddr, &send_data);
 }
 
 /*FUNCTION**********************************************************************
@@ -372,14 +472,14 @@ void send_spi_data(uint8_t *src, uint32_t writeLength)
  *END**************************************************************************/
 void receive_spi_data(uint8_t *dest, uint32_t readLength)
 {
-    lpspi_transfer_t receive_data;
-    uint32_t baseAddr = g_spiBaseAddr[1];
+    spi_transfer_t receive_data;
+    uint32_t baseAddr = g_spiBaseAddr[5];
 
     receive_data.rxData = dest;
     receive_data.dataSize = readLength;
     receive_data.txData = NULL;
-    receive_data.configFlags = kLPSPI_MasterPcs0 | kLPSPI_MasterPcsContinuous | kLPSPI_MasterByteSwap;
-    LPSPI_MasterTransferBlocking((LPSPI_Type *)baseAddr, &receive_data);
+    receive_data.configFlags = kSPI_FrameAssert;
+    SPI_MasterTransferBlocking((SPI_Type *)baseAddr, &receive_data);
 }
 
 /*FUNCTION**********************************************************************
@@ -399,7 +499,7 @@ void configure_spi_speed(uint32_t speedkhz)
  * Description   : spi config settings process
  *
  *END**************************************************************************/
-void configure_spi_settings(lpspi_clock_polarity_t polarity, lpspi_clock_phase_t phase, lpspi_shift_direction_t direction)
+void configure_spi_settings(spi_clock_polarity_t polarity, spi_clock_phase_t phase, spi_shift_direction_t direction)
 {
     s_spiUserConfig.polarity = polarity;
     s_spiUserConfig.phase = phase;
@@ -450,21 +550,7 @@ void uart_rx_callback(uint8_t byte)
  *END**************************************************************************/
 GPIO_Type *getGpioBaseAddrFromAscii(uint8_t port)
 {
-    if ((port >= '1') && (port <= '5'))
-    {
-        port = port - '1';
-    }
-
-    switch (port)
-    {
-        default:
-        case 1:
-            return GPIO1;
-        case 2:
-            return GPIO2;
-        case 5:
-            return GPIO5;
-    }
+    return GPIO;
 }
 
 /*FUNCTION**********************************************************************
@@ -475,7 +561,12 @@ GPIO_Type *getGpioBaseAddrFromAscii(uint8_t port)
  *END**************************************************************************/
 void configure_gpio(uint8_t port, uint8_t pinNum, uint8_t muxVal)
 {
-
+    gpio_pin_config_t led_config = {
+        kGPIO_DigitalOutput,
+        0,
+    };
+    GPIO_PortInit(GPIO, port);
+    GPIO_PinInit(GPIO, port, pinNum, &led_config);
 }
 
 /*FUNCTION**********************************************************************
@@ -486,18 +577,7 @@ void configure_gpio(uint8_t port, uint8_t pinNum, uint8_t muxVal)
  *END**************************************************************************/
 void set_gpio(uint8_t port, uint8_t pinNum, uint8_t level)
 {
-    GPIO_Type *realPort = getGpioBaseAddrFromAscii(port);
-
-    realPort->GDIR |= 1 << pinNum;
-
-    if (level)
-    {
-        realPort->DR |= 1 << pinNum;
-    }
-    else
-    {
-        realPort->DR &= ~(1 << pinNum);
-    }
+    GPIO_PinWrite(GPIO, port, pinNum, level);
 }
 
 #if __ICCARM__

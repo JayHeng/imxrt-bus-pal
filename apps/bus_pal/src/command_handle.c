@@ -613,6 +613,11 @@ static void handleSpiConfigCommand(uint8_t configMask)
     lpspi_clock_phase_t phase = (lpspi_clock_phase_t)((configMask >> kSpiConfigShift_Phase) & 1);
     lpspi_shift_direction_t direction = (lpspi_shift_direction_t)((configMask >> kSpiConfigShift_Direction) & 1);
 #endif
+#if defined(CPU_MIMXRT685SFVKB_cm33)
+    spi_clock_polarity_t polarity = (spi_clock_polarity_t)((configMask >> kSpiConfigShift_Polarity) & 1);
+    spi_clock_phase_t phase = (spi_clock_phase_t)((configMask >> kSpiConfigShift_Phase) & 1);
+    spi_shift_direction_t direction = (spi_shift_direction_t)((configMask >> kSpiConfigShift_Direction) & 1);
+#endif
     configure_spi_settings(polarity, phase, direction);
 
     sendOKResponse();
