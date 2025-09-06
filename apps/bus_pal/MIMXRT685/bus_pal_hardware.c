@@ -264,15 +264,7 @@ void init_hardware(void)
  *END**************************************************************************/
 uint32_t uart_get_clock(uint32_t instance)
 {
-    switch (instance)
-    {
-        case 0:
-        {
-            return CLOCK_GetFlexCommClkFreq(0U);
-        }
-        default:
-            return 0;
-    }
+    return CLOCK_GetFlexCommClkFreq(instance);
 }
 
 /*FUNCTION**********************************************************************
@@ -285,6 +277,10 @@ static void init_uarts(void)
 {
     usart_config_t config;
     uint32_t baseAddr = g_uartBaseAddr[0];
+
+    /* attach FRG0 clock to FLEXCOMM0 */
+    CLOCK_SetFRGClock((&(const clock_frg_clk_config_t){0, kCLOCK_FrgPllDiv, 255, 0}));
+    CLOCK_AttachClk(kFRG_to_FLEXCOMM0);
 
     /*
      * config.baudRate_Bps = 115200U;
@@ -337,15 +333,21 @@ void init_spi(void)
     spi_master_config_t config;
     uint32_t baseAddr = g_spiBaseAddr[5];
 
-    /*Set clock source for SPI*/
+    /*Set clock source for FLEXCOMM5 */
     CLOCK_AttachClk(kSFRO_to_FLEXCOMM5);
 
+    /*
+     * config.enableLoopback = false;
+     * config.enableMaster = true;
+     * config.polarity = kSPI_ClockPolarityActiveHigh;
+     * config.phase = kSPI_ClockPhaseFirstEdge;
+     * config.direction = kSPI_MsbFirst;
+     * config.baudRate_Bps = 500000U;
+     */
     SPI_MasterGetDefaultConfig(&config);
-
     config.polarity = s_spiUserConfig.polarity;
     config.phase = s_spiUserConfig.phase;
     config.baudRate_Bps = s_spiUserConfig.baudRate_Bps;
-
     config.sselNum = (spi_ssel_t)0;
     config.sselPol = (spi_spol_t)kSPI_SpolActiveAllLow;
 
