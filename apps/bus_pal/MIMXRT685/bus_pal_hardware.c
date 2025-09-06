@@ -165,7 +165,11 @@ void init_hardware(void)
     IOPCTL_PinMuxSet(IOPCTL, 0U, 2U, port0_pin2_config);
 
     // Enable pins for Flexcomm5 SPI
-    // RT685-EVK Rev.Ex - J28.3/4/5/6
+    // RT685-EVK Rev.Ex - J28.3/4/5/6 ()
+    // RT685-AUD-EVK    - J28.3/4/5/6 (Make sure J41.2-3)
+    // if it is used to test RT685-EVK, do below rework
+    //   1. Disconnect R385, R386, R387, R388 "A" and connect "B"
+    //   2. Short JP4, VDDIO0 = 1.8V 
     const uint32_t port1_pin3_config = (/* Pin is configured as FC5_SCK */
                                         IOPCTL_PIO_FUNC1 |
                                         /* Disable pull-up / pull-down function */
